@@ -2,9 +2,13 @@
 __pycache__/
 *.py[codz]
 *$py.class
-
-
+consensus
+analysis_results
+log
+oldermodel
+wandb
 data
+processed_hf_dataset
 # C extensions
 *.so
 

@@ -1,20 +1,31 @@
-FROM pytorch/pytorch:2.8.0-cuda12.9-cudnn9-runtime
+FROM nvidia/cuda:12.4.0-base-ubuntu22.04
 
-# 2. Munkakönyvtár beállítása a konténeren belül
-WORKDIR /app
-# 3. Rendszerszintű függőségek telepítése
+WORKDIR /work
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     libgl1-mesa-glx \
     libglib2.0-0 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
-# 4. Python függőségek másolása és telepítése
+
+RUN apt-get update && apt-get install -y \
+    bash \
+    coreutils \
+    procps \
+    util-linux \
+    python3 python3-venv python3-pip \
+    curl git wget \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN python3 -m venv /opt/venv && \
+    /opt/venv/bin/pip install --upgrade pip
+
+ENV PATH="/opt/venv/bin:$PATH"
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-# 5. Alkalmazás kódjának és a futtató scriptnek a másolása
+
 COPY ./src .
-# 6. A futtató script végrehajthatóvá tétele
 RUN chmod +x run.sh
-# 7. Alapértelmezett parancs a konténer indításakor
-CMD ["bash", "run.sh"]
+
+CMD ["bash", "./src/run.sh"]

@@ -1,0 +1,33 @@
+version: "3.8"
+
+services:
+  training:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: LegalText
+    volumes:
+      - ./:/work
+      - vscode-server-data:/root/.vscode-server
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - PYTHONPATH=/work
+      - WANDB_API_KEY=${WANDB_API_KEY}
+    env_file:
+      - .env
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    stdin_open: true
+    tty: true
+    restart: "no"
+    ports:
+      - "7860:7860"
+
+volumes:
+  vscode-server-data:
+    driver: local
