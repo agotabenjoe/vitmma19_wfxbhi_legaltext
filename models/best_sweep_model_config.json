@@ -1,1 +1,1 @@
-{"batch_size": 64, "embed_dim": 100, "epochs": 30, "hidden_dim": 128, "learning_rate": 0.012588483492021098, "num_layers": 3}
+{"batch_size": 128, "embed_dim": 50, "epochs": 30, "hidden_dim": 64, "learning_rate": 0.03708204425095935, "num_layers": 2}
