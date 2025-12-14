@@ -108,7 +108,7 @@ All scripts use a unified logger (`src/utils.py`) that outputs to both stdout an
 
 
 
-## How to Run the Project
+## Docker Instructions
 
 This project is fully containerized and can be run using Docker or Docker Compose. Follow the steps below:
 
