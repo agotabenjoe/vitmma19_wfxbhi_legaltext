@@ -2,9 +2,7 @@ import sys
 import os
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from utils import setup_logger
-log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'log', 'run.log')
-logger = setup_logger(log_path)
+from utils import logger
 import os
 import json
 import glob
@@ -23,6 +21,7 @@ from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_sc
 import sys
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from model import LSTMClassifier, TextDataset
+import config
 
 def analyze_consensus_quality(consensus_folder, output_dir):
     logger.info("\n" + "="*40)
@@ -171,11 +170,11 @@ def main():
         logger.info(f"   Ground Truth (0-4): {y_test[i]}, Predicted: {base_preds[i]}")
         logger.info("-" * 30)
     logger.info("\n   --- B. Evaluating Best LSTM ---")
-    weights_path = os.path.join(model_dir, "best_sweep_model.pt")
+    weights_path = os.path.join(root_dir, config.BEST_MODEL_PATH)
     if os.path.exists(weights_path):
         config_path = weights_path.replace('.pt', '_config.json')
         vocab_path = weights_path.replace('.pt', '_vocab.json')
-        with open(config_path, 'r') as f: config = json.load(f)
+        with open(config_path, 'r') as f: model_config = json.load(f)
         with open(vocab_path, 'r') as f: vocab = json.load(f)
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         test_data_objs = [{'text': x['text'], 'label': x['label']} for x in test_ds]
@@ -183,10 +182,10 @@ def main():
         test_loader = DataLoader(lstm_test_ds, batch_size=32, shuffle=False)
         model = LSTMClassifier(
             vocab_size=len(vocab) + 1,
-            embed_dim=config['embed_dim'],
-            hidden_dim=config['hidden_dim'],
+            embed_dim=model_config['embed_dim'],
+            hidden_dim=model_config['hidden_dim'],
             num_classes=5,
-            num_layers=config['num_layers']
+            num_layers=model_config['num_layers']
         ).to(device)
         model.load_state_dict(torch.load(weights_path, map_location=device))
         model.eval()

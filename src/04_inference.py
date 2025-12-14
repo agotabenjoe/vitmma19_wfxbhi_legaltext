@@ -2,9 +2,9 @@ import os
 import json
 import torch
 import re
-import gradio as gr
 import torch.nn.functional as F
 from model import LSTMClassifier
+from utils import logger  # Import the unified logger
 
 MODEL_PATH = "models/best_sweep_model.pt"
 CONFIG_PATH = MODEL_PATH.replace('.pt', '_config.json')
@@ -20,7 +20,7 @@ LABELS = {
 }
 
 def load_artifacts():
-    print(f"Loading model from {MODEL_PATH}...")
+    logger.info(f"Loading model from {MODEL_PATH}...")
     if not os.path.exists(MODEL_PATH):
         raise FileNotFoundError(f"Model file not found at {MODEL_PATH}")
     with open(CONFIG_PATH, 'r') as f:
@@ -41,14 +41,6 @@ def load_artifacts():
     model.eval()
     return model, vocab, config
 
-try:
-    model, vocab, config = load_artifacts()
-    print("Model loaded successfully!")
-except Exception as e:
-    print(f"Error loading model: {e}")
-    print("Please ensure you have trained the model and the paths are correct.")
-    exit(1)
-
 def preprocess_text(text, vocab):
     words = re.findall(r'\w+', text.lower())
     indices = [vocab.get(w, 0) for w in words]
@@ -56,7 +48,7 @@ def preprocess_text(text, vocab):
         return torch.tensor([0], device=DEVICE).unsqueeze(0)
     return torch.tensor(indices, device=DEVICE).unsqueeze(0)
 
-def classify_text(text):
+def classify_text(text, model, vocab):
     if not text or not text.strip():
         return None
     inputs = preprocess_text(text, vocab)
@@ -70,17 +62,29 @@ def classify_text(text):
         results[label_name] = float(score)
     return results
 
+# Sample Hungarian ÁSZF texts (generic examples for inference)
+sample_texts = [
+    "A szolgáltató fenntartja a jogot a szolgáltatás módosítására bármikor.",
+    "A felhasználó köteles a személyes adatokat pontosan megadni.",
+    "A szerződés megszűnésével a felek közötti jogviszony véglegesen megszűnik.",
+    "A vitás kérdések esetén a bíróság illetékes.",
+    "A jelen feltételek bármely módosítása írásban történik."
+]
+
 if __name__ == "__main__":
-    demo = gr.Interface(
-        fn=classify_text,
-        inputs=gr.Textbox(lines=5, placeholder="Írja be a jogi szöveget ide..."),
-        outputs=gr.Label(num_top_classes=5),
-        title="Jogi Szöveg Osztályozó",
-        description="Írjon be egy szöveget, hogy besorolja annak komplexitását/nehézségét 1 (alacsony) és 5 (magas) között.",
-        examples=[
-            ["A bérlő köteles a bérleti díjat minden hónap első napján megfizetni."],
-            ["A jelen szerződés bármely rendelkezésével ellentétes kikötés hiányában a kártérítési kötelezettségek a szerződés megszűnését követően is fennmaradnak."]
-        ]
-    )
-    print("Launching Gradio on http://localhost:7860")
-    demo.launch(server_name="0.0.0.0", server_port=7860, share=False)
+    try:
+        model, vocab, config = load_artifacts()
+        logger.info("Model loaded successfully for inference!")
+        
+        logger.info("\n--- Sample Inference on Hungarian ÁSZF Texts ---")
+        for i, text in enumerate(sample_texts, 1):
+            results = classify_text(text, model, vocab)
+            if results:
+                top_label = max(results, key=results.get)
+                logger.info(f"Sample {i}: '{text[:50]}...' -> Predicted: {top_label} (Probabilities: {results})")
+            else:
+                logger.info(f"Sample {i}: '{text[:50]}...' -> No valid prediction")
+        
+    except Exception as e:
+        logger.error(f"Error during inference: {e}")
+        logger.error("Please ensure the model is trained and paths are correct.")

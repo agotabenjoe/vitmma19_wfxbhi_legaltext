@@ -1,9 +1,7 @@
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from utils import setup_logger
-log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'log', 'run.log')
-logger = setup_logger(log_path)
+from utils import logger
 import os
 import json
 import requests

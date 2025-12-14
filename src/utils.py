@@ -1,28 +1,22 @@
 import logging
-import os
+import sys
 
-def setup_logger(log_path=None, level=logging.INFO):
+def setup_logger(level=logging.INFO):
     """
-    Sets up a logger that logs to both stdout and a file (if log_path is given).
+    Sets up a logger that logs to stdout (for Docker compatibility).
     """
-    logger = logging.getLogger()
+    logger = logging.getLogger("legaltext")
     logger.setLevel(level)
-    formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
-
-    # Remove all handlers
-    while logger.handlers:
-        logger.handlers.pop()
-
-    # Stream handler (stdout)
-    sh = logging.StreamHandler()
-    sh.setFormatter(formatter)
-    logger.addHandler(sh)
-
-    # File handler
-    if log_path:
-        os.makedirs(os.path.dirname(log_path), exist_ok=True)
-        fh = logging.FileHandler(log_path)
-        fh.setFormatter(formatter)
-        logger.addHandler(fh)
+    
+    # Only add handler if none exist
+    if not logger.handlers:
+        formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
+        # Stream handler (stdout) - Docker captures stdout
+        sh = logging.StreamHandler(sys.stdout)
+        sh.setFormatter(formatter)
+        logger.addHandler(sh)
 
     return logger
+
+# Create a module-level logger for all files to import
+logger = setup_logger()

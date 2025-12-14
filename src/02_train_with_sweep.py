@@ -5,11 +5,8 @@ from torch.utils.data import DataLoader
 from datasets import load_from_disk
 import wandb
 import sys
-from utils import setup_logger
+from utils import logger
 from model import LSTMClassifier, TextDataset, OrdinalLoss
-
-log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'log', 'run.log')
-logger = setup_logger(log_path)
 
 def evaluate(model, loader, criterion, device):
     model.eval()

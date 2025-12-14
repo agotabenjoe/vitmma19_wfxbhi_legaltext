@@ -3,14 +3,11 @@ import json
 import torch
 from torch.utils.data import DataLoader
 from datasets import load_from_disk
-import wandb
+from collections import Counter
 import sys
-from utils import setup_logger
+from utils import logger
 from model import LSTMClassifier, TextDataset, OrdinalLoss
-
-
-log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'log', 'run.log')
-logger = setup_logger(log_path)
+import config
 
 def evaluate(model, loader, criterion, device):
     model.eval()
@@ -29,24 +26,29 @@ def evaluate(model, loader, criterion, device):
     return total_loss / len(loader), correct / total
 
 def train():
-    config = {"batch_size": 128, "embed_dim": 50, "epochs": 30, "hidden_dim": 64, "learning_rate": 0.03708204425095935, "num_layers": 2}
-    wandb.init(project="legaltext", config=config)
-    config = wandb.config
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    model_dir = os.path.join(base_dir, '..', 'models')
+    root_dir = os.path.join(base_dir, '..')
+    model_dir = os.path.join(root_dir, config.MODEL_DIR)
     os.makedirs(model_dir, exist_ok=True)
-    global_best_model_path = os.path.join(model_dir, "best_final_model.pt")
-    global_best_metric_path = os.path.join(model_dir, "best_final_acc.txt")
+    global_best_model_path = os.path.join(root_dir, config.BEST_MODEL_PATH)
+    global_best_metric_path = os.path.join(root_dir, config.BEST_ACC_PATH)
+    
     logger.info("========== TRAINING CONFIGURATION ==========")
-    for k, v in dict(config).items():
-        logger.info(f"{k}: {v}")
+    logger.info(f"EPOCHS: {config.EPOCHS}")
+    logger.info(f"BATCH_SIZE: {config.BATCH_SIZE}")
+    logger.info(f"LEARNING_RATE: {config.LEARNING_RATE}")
+    logger.info(f"EMBED_DIM: {config.EMBED_DIM}")
+    logger.info(f"HIDDEN_DIM: {config.HIDDEN_DIM}")
+    logger.info(f"NUM_LAYERS: {config.NUM_LAYERS}")
+    logger.info(f"EARLY_STOPPING_PATIENCE: {config.EARLY_STOPPING_PATIENCE}")
     logger.info("============================================")
+    
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    dataset_path = os.path.join(base_dir, '..', 'data', 'final_split_dataset')
+    logger.info(f"Using device: {device}")
+    dataset_path = os.path.join(root_dir, config.DATASET_PATH)
     dataset = load_from_disk(dataset_path)
     logger.info("Data loaded from %s", dataset_path)
     logger.info("Train size: %d | Validation size: %d", len(dataset['train']), len(dataset['validation']))
-    from collections import Counter
     train_counts = Counter([x['label'] for x in dataset['train']])
     val_counts = Counter([x['label'] for x in dataset['validation']])
     logger.info(f"Train class distribution: {dict(train_counts)}")
@@ -60,27 +62,26 @@ def train():
     vocab_size = len(vocab) + 1
     train_data = TextDataset(dataset['train'], vocab=vocab)
     val_data = TextDataset(dataset['validation'], vocab=vocab)
-    train_loader = DataLoader(train_data, batch_size=config.batch_size, shuffle=True)
-    val_loader = DataLoader(val_data, batch_size=config.batch_size, shuffle=False)
+    train_loader = DataLoader(train_data, batch_size=config.BATCH_SIZE, shuffle=True)
+    val_loader = DataLoader(val_data, batch_size=config.BATCH_SIZE, shuffle=False)
     model = LSTMClassifier(
         vocab_size=vocab_size,
-        embed_dim=config.embed_dim,
-        hidden_dim=config.hidden_dim,
-        num_classes=5,
-        num_layers=config.num_layers,
+        embed_dim=config.EMBED_DIM,
+        hidden_dim=config.HIDDEN_DIM,
+        num_classes=config.NUM_CLASSES,
+        num_layers=config.NUM_LAYERS,
     ).to(device)
     n_params = sum(p.numel() for p in model.parameters())
     n_trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
     logger.info("Model architecture: %s", model)
     logger.info(f"Total parameters: {n_params} | Trainable: {n_trainable}")
-    optimizer = torch.optim.Adam(model.parameters(), lr=config.learning_rate)
-    criterion = OrdinalLoss(num_classes=5)
-    patience = 20
+    optimizer = torch.optim.Adam(model.parameters(), lr=config.LEARNING_RATE)
+    criterion = OrdinalLoss(num_classes=config.NUM_CLASSES)
     best_run_acc = 0.0
     best_val_loss_for_early_stopping = float('inf')
     epochs_no_improve = 0
     best_run_state = None
-    for epoch in range(config.epochs):
+    for epoch in range(config.EPOCHS):
         model.train()
         train_loss = 0.0
         for x, y in train_loader:
@@ -93,12 +94,6 @@ def train():
             train_loss += loss.item()
         avg_train_loss = train_loss / len(train_loader)
         val_loss, val_acc = evaluate(model, val_loader, criterion, device)
-        wandb.log({
-            "epoch": epoch+1, 
-            "train_loss": avg_train_loss, 
-            "val_loss": val_loss, 
-            "val_acc": val_acc
-        })
         logger.info(f"Epoch {epoch+1} | Train Loss: {avg_train_loss:.4f} | Val Loss: {val_loss:.4f} | Val Acc: {val_acc:.4f}")
         if val_acc > best_run_acc:
             best_run_acc = val_acc
@@ -108,25 +103,26 @@ def train():
             epochs_no_improve = 0
         else:
             epochs_no_improve += 1
-        if epochs_no_improve >= patience:
+        if epochs_no_improve >= config.EARLY_STOPPING_PATIENCE:
             logger.info(f"Early stopping triggered at epoch {epoch+1}")
             break
-    global_best_acc = 0.0
-    if os.path.exists(global_best_metric_path):
-        with open(global_best_metric_path, 'r') as f:
-            try:
-                global_best_acc = float(f.read().strip())
-            except ValueError: pass
-    logger.info(f"Run Finished. Local Best Acc: {best_run_acc:.4f} vs Global Best Acc: {global_best_acc:.4f}")
-    if best_run_acc > global_best_acc:
-        logger.info(f"NEW RECORD! Overwriting best model.")
-        with open(global_best_metric_path, 'w') as f:
-            f.write(str(best_run_acc))
-        torch.save(best_run_state, global_best_model_path)
-        with open(global_best_model_path.replace('.pt', '_config.json'), 'w') as f:
-            json.dump(dict(config), f)
-        with open(global_best_model_path.replace('.pt', '_vocab.json'), 'w') as f:
-            json.dump(vocab, f)
+    
+    logger.info(f"Training Finished. Best Validation Accuracy: {best_run_acc:.4f}")
+    logger.info("Saving best model...")
+    torch.save(best_run_state, global_best_model_path)
+    config_dict = {
+        "batch_size": config.BATCH_SIZE,
+        "embed_dim": config.EMBED_DIM,
+        "hidden_dim": config.HIDDEN_DIM,
+        "num_layers": config.NUM_LAYERS,
+        "learning_rate": config.LEARNING_RATE,
+        "epochs": config.EPOCHS
+    }
+    with open(global_best_model_path.replace('.pt', '_config.json'), 'w') as f:
+        json.dump(config_dict, f)
+    with open(global_best_model_path.replace('.pt', '_vocab.json'), 'w') as f:
+        json.dump(vocab, f)
+    logger.info(f"Model saved to {global_best_model_path}")
 
 if __name__ == '__main__':
     train()
